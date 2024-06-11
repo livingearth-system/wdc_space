@@ -1,0 +1,34 @@
+name: Copy Notebooks to blob store shared container
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    
+    - uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+   
+    - name: Upload to blob storage
+      uses: azure/CLI@v1
+      env:
+        AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
+      with:
+        inlineScript: |
+          apk add curl
+          myip=$(curl -s ipv4.icanhazip.com | tr -d '\n')
+          az storage account network-rule add --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --account-name ${{ secrets.AZURE_STORAGE_ACCOUNT }} --ip-address $myip
+          sleep 30 # to allow time for rule to apply
+          az storage blob delete-batch --account-name ${{ secrets.AZURE_STORAGE_ACCOUNT }} --auth-mode login -s ${{ secrets.AZURE_CONTAINER_NAME }} --pattern 'wdc_space/*'
+          az storage blob upload-batch --account-name ${{ secrets.AZURE_STORAGE_ACCOUNT }} --auth-mode login -d ${{ secrets.AZURE_CONTAINER_NAME }}/wdc_space -s ./
+          az storage account network-rule remove --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --account-name ${{ secrets.AZURE_STORAGE_ACCOUNT }} --ip-address $myip
+
+    - name: logout
+      run: |
+        az logout
+      if: always()
