@@ -1,0 +1,30 @@
+﻿Habitat Type,Lowest Sequestration Rate (tC/ha/yr),Highest Sequestration Rate (tC/ha/yr),Lowest Emission Rate (tC/ha/yr),Highest Emission Rate (tC/ha/yr)
+Semi-natural Grassland,-0.5,-2.5,0,2.5
+Juncus Rushes,-1.2,-3,0,3
+Molinia Grassland,-0.2,-1.5,0,1.5
+Young Plantations,-2,-5,0,5
+Felled Woodland,0,-4,1,4
+Coppice Woodland,-1,-3,0,3
+Woodland and Scrub,-1,-3.5,0,3.5
+Broadleaved Woodland,-2,-6,0,6
+Needle-leaved Woodland,-1.5,-4,0,4
+Ulex Dominated Scrub,-0.5,-2,0,2
+Acid Grassland,-0.5,-1.5,0,1.5
+Neutral Grassland,-0.7,-2,0,2
+Calcareous Grassland,-1,-2.5,0,2.5
+Improved Grassland,-1.5,-3,0,3
+Marsh/Marshy Grassland,-1.2,-3.5,0,3.5
+Bracken,-0.5,-1.5,0,1.5
+Dry Dwarf Shrub Heath,-0.2,-1,0,1
+Wet Dwarf Shrub Heath,-0.5,-1.5,0,1.5
+Wet Heath,-0.5,-1.8,0,1.8
+Blanket Bog,-0.2,-0.8,0,0.8
+Bog with Some Trees,-0.4,-1,0,1
+Reed Swamp,-1.5,-3.5,0,3.5
+Wetland Grazing Marsh,-0.7,-2,0,2
+Unvegetated Tidal Flat,-0.1,-0.5,0,0.5
+Saltmarsh,-2,-6,0,6
+Estuarine Habitats,-0.5,-5,0,5
+Urban,-0.2,-1.5,0,1.5
+Open Freshwater Lake,-0.1,-0.5,0,0.5
+Open Freshwater Reservoir,-0.2,-1,0,1
