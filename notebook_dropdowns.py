@@ -16,7 +16,12 @@ import ipywidgets as widgets
 import ipyleaflet
 from IPython.display import display
 import matplotlib.pyplot as plt
-from ipywidgets import Layout
+from ipywidgets import Layout, IntProgress
+
+
+import time
+
+
 
 WELSH_AREAS_FOLDER = "/home/jovyan/shared_space/welsh_areas"
 USER_UPLOADS_FOLDER = "/home/jovyan/shared_space/uploads"
@@ -281,13 +286,175 @@ def static_polygon_plot(get_polygon):
 
 
 
+# def interactive_polygon_plot(gpd_df_sub):
+#     """
+#     Produces an interactive plot of a given polygon
+#     """
+#     global AREA_SELECTION
+#     global selected_polygon
+    
+#     # ================ add progress bar =========
+#     max_count = 100
+
+#     progress_value = IntProgress(min=0, max=max_count) # instantiate the bar
+#     display(progress_value) # display the bar
+
+#     count = 0
+#     while count <= max_count:
+#         progress_value.value += 1 # signal to increment the progress bar
+#         time.sleep(.1)
+#         count += 1
+        
+#     # =================== end of progress
+        
+
+#     # Style function for polygons
+#     def style_function(feature):
+#         if selected_polygon and all(
+#             feature["properties"][k] == selected_polygon[k] for k in selected_polygon
+#         ):
+#             return {
+#                 "color": "black",
+#                 "fillColor": "yellow",  # Color for the selected polygon
+#                 "opacity": 0.05,
+#                 "weight": 1.9,
+#                 "dashArray": "2",
+#                 "fillOpacity": 0.6,
+#             }
+#         else:
+#             return {
+#                 "color": "black",
+#                 "fillColor": "#3366cc",  # Default color
+#                 "opacity": 0.05,
+#                 "weight": 1.9,
+#                 "dashArray": "2",
+#                 "fillOpacity": 0.6,
+#             }
+
+#     # Function to update the style of the selected polygon
+#     def update_polygon_style(feature):
+#         geo_data.style_callback = style_function
+#         #geo_data.clear_layers()
+#         #geo_data.update()
+
+#     # Function to handle click events and store the selected polygon
+#     def handle_click(event, feature, **kwargs):
+#         html.value = f"<b style='color:black'> Identifying selected area please wait .... </b> <br>"
+#         selected_polygon = feature["properties"]
+#         # Update the style of the selected polygon
+#         update_polygon_style(feature)
+#         html.value = f"<b style='color:orange'>Selected Polygon: </b> <br> {selected_polygon}"
+#         set_global_result("global_selected_polygon", selected_polygon)
+#         set_global_result("global_selected_polygon_type", "Selected")
+
+
+#     # Function to confirm and rename the output to AREA_selection
+#     def confirm_selection(button):
+#         AREA_SELECTION = AREA_SELECTION
+#         print("The selected area has been confirmed as 'AREA_SELECTION'")
+        
+    
+#     # Function to select all polyons 
+#     def confirm_select_all(button):
+#         html.value = "<b style='color:orange'>  All polygons currently selected <b>"
+#         set_global_result("global_selected_polygon", gpd_df_sub)
+#         set_global_result("global_selected_polygon_type", "All")
+#         print("All polygon selected")
+
+#     # Calculate the bounding box
+#     bounds = gpd_df_sub.total_bounds  # returns (minx, miny, maxx, maxy)
+#     sw = [bounds[1], bounds[0]]  # southwest corner (miny, maxx)
+#     ne = [bounds[3], bounds[2]]  # northeast corner (maxy, minx)
+
+#     # Calculate the center of the bounding box
+#     center = [(sw[0] + ne[0]) / 2, (sw[1] + ne[1]) / 2]
+
+#     # Convert any Timestamps to strings
+#     AREA_SELECTION = convert_timestamps_to_strings(gpd_df_sub)
+
+#     # Initialize selected_polygon variable
+#     selected_polygon = None
+
+#     # Create a button for confirming the selection
+#     confirm_button = widgets.Button(description="CONFIRM")
+#     confirm_button.on_click(confirm_selection)
+    
+    
+#     #use all polygon button
+#     select_all_poly_button = widgets.Button(description="USE ALL POLYGONS")
+#     select_all_poly_button.on_click(confirm_select_all)
+
+#     # Display the instructions, button, and map
+#     # instructions = widgets.HTML("<b>If you are happy with the entire areas shown please click 'Confirm'.<br>If you want to select a specific polygon please click on the map.</b>")
+#     # display(widgets.VBox([instructions, confirm_button]))
+#     # HTML widget to display selected shapefile information
+#     html = widgets.HTML()
+#     html.value = "<b style='color:orange'> All polygons currently selected <b>"
+
+#     # Create GeoData layer
+#     geo_data = ipyleaflet.GeoData(
+#         geo_dataframe=AREA_SELECTION,
+#         style={
+#             "color": "black",
+#             "fillColor": "#3366cc",
+#             "opacity": 0.05,
+#             "weight": 1.9,
+#             "dashArray": "2",
+#             "fillOpacity": 0.6,
+#         },
+#         hover_style={"fillColor": "red", "fillOpacity": 0.2},
+#         name="Boundary",
+#     )
+
+#     geo_data.on_click(handle_click)
+
+#     # Create a map centered on the GeoDataFrame
+#     m = ipyleaflet.Map(
+#         center=center,
+#         zoom=50,
+#         basemap=ipyleaflet.basemaps.Esri.WorldImagery,
+#         layout=widgets.Layout(height="600px"),
+#     )
+
+#     # Add GeoData layer to the map
+#     m.add_layer(geo_data)
+
+#     # Fit map to bounds
+#     m.fit_bounds([sw, ne])
+
+#     # Add controls to the map
+#     m.add_control(ipyleaflet.LayersControl(position="topright"))
+#     m.add_control(ipyleaflet.FullScreenControl())
+
+#     # Display the map
+#     # display(m)
+#     display(
+#         widgets.VBox(
+#             [
+#                 widgets.HTML(
+#                     "<b>If you are happy with the entire areas shown please click <span style='color:orange'>'USE ALL POLYGONS' </span>.<br>If you want to select a specific polygon please click on the map, to select area and <span style='color:orange'> wait for <span style='color:#5a5c5a'> 'Selected Polygon' </span> confirmation below.<span>  </b>"
+#                 ),
+#                 html,
+#                 # confirm_button,
+#                 select_all_poly_button,
+#                 m,
+#             ]
+#         )
+#     )
+
+
+
+
+
+
+
 def interactive_polygon_plot(gpd_df_sub):
     """
     Produces an interactive plot of a given polygon
     """
     global AREA_SELECTION
     global selected_polygon
-
+    
     # Style function for polygons
     def style_function(feature):
         if selected_polygon and all(
@@ -314,8 +481,6 @@ def interactive_polygon_plot(gpd_df_sub):
     # Function to update the style of the selected polygon
     def update_polygon_style(feature):
         geo_data.style_callback = style_function
-        #geo_data.clear_layers()
-        #geo_data.update()
 
     # Function to handle click events and store the selected polygon
     def handle_click(event, feature, **kwargs):
@@ -327,19 +492,34 @@ def interactive_polygon_plot(gpd_df_sub):
         set_global_result("global_selected_polygon", selected_polygon)
         set_global_result("global_selected_polygon_type", "Selected")
 
-
     # Function to confirm and rename the output to AREA_selection
     def confirm_selection(button):
         AREA_SELECTION = AREA_SELECTION
         print("The selected area has been confirmed as 'AREA_SELECTION'")
-        
-    
-    # Function to select all polyons 
+
+    # Function to select all polygons 
     def confirm_select_all(button):
         html.value = "<b style='color:orange'>  All polygons currently selected <b>"
         set_global_result("global_selected_polygon", gpd_df_sub)
         set_global_result("global_selected_polygon_type", "All")
         print("All polygon selected")
+
+    # ================ add progress bar =========
+    progress_value = IntProgress(min=0, max=100) # instantiate the bar
+    display(progress_value) # display the bar
+
+    def update_progress_bar():
+        """Continuously update the progress bar."""
+        progress = 0
+        while progress < 99:
+            progress_value.value = progress % 100
+            progress += 1
+            time.sleep(0.1)
+    
+    # Start progress bar in a separate thread
+    import threading
+    progress_thread = threading.Thread(target=update_progress_bar)
+    progress_thread.start()
 
     # Calculate the bounding box
     bounds = gpd_df_sub.total_bounds  # returns (minx, miny, maxx, maxy)
@@ -359,17 +539,16 @@ def interactive_polygon_plot(gpd_df_sub):
     confirm_button = widgets.Button(description="CONFIRM")
     confirm_button.on_click(confirm_selection)
     
-    
-    #use all polygon button
-    select_all_poly_button = widgets.Button(description="USE ALL POLYGONS")
-    select_all_poly_button.on_click(confirm_select_all)
-
     # Display the instructions, button, and map
     # instructions = widgets.HTML("<b>If you are happy with the entire areas shown please click 'Confirm'.<br>If you want to select a specific polygon please click on the map.</b>")
     # display(widgets.VBox([instructions, confirm_button]))
     # HTML widget to display selected shapefile information
     html = widgets.HTML()
     html.value = "<b style='color:orange'> All polygons currently selected <b>"
+    
+    #use all polygon button
+    select_all_poly_button = widgets.Button(description="USE ALL POLYGONS")
+    select_all_poly_button.on_click(confirm_select_all)
 
     # Create GeoData layer
     geo_data = ipyleaflet.GeoData(
@@ -406,8 +585,10 @@ def interactive_polygon_plot(gpd_df_sub):
     m.add_control(ipyleaflet.LayersControl(position="topright"))
     m.add_control(ipyleaflet.FullScreenControl())
 
-    # Display the map
-    # display(m)
+    # Stop the progress bar when the map is ready
+    progress_value.value = 100
+
+    # Display the map and UI elements
     display(
         widgets.VBox(
             [
@@ -415,13 +596,12 @@ def interactive_polygon_plot(gpd_df_sub):
                     "<b>If you are happy with the entire areas shown please click <span style='color:orange'>'USE ALL POLYGONS' </span>.<br>If you want to select a specific polygon please click on the map, to select area and <span style='color:orange'> wait for <span style='color:#5a5c5a'> 'Selected Polygon' </span> confirmation below.<span>  </b>"
                 ),
                 html,
-                # confirm_button,
                 select_all_poly_button,
                 m,
             ]
         )
     )
 
-
-
+    # Ensure progress thread has finished before exiting function
+    progress_thread.join()
 
