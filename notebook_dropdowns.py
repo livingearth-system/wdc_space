@@ -16,6 +16,7 @@ import ipywidgets as widgets
 import ipyleaflet
 from IPython.display import display
 import matplotlib.pyplot as plt
+from ipywidgets import Layout
 
 WELSH_AREAS_FOLDER = "/home/jovyan/shared_space/welsh_areas"
 USER_UPLOADS_FOLDER = "/home/jovyan/shared_space/uploads"
@@ -37,9 +38,54 @@ global gpd_df
 global col_name_var
 global AREA_SELECTION
 global selected_polygon
+global RESULTS
+
+
+RESULTS = {}
+RESULTS["global_selected_polygon"] = None
+RESULTS["global_selected_polygon_type"] = None  # options are All: if all is selected and Selected: if a single one is selected
+
 
 AREA_SELECTION = None
 selected_polygon = None
+
+
+def set_global_result(key, value):
+    """ This sets value to globally defined RESULTS dictionary """
+    RESULTS[key] = value
+    
+    
+def get_global_result(key):
+    """ This reads value from globally defined RESULTS dictionary """
+    # return RESULTS.get(key, "Nothing selected")
+    return RESULTS.get(key, None)
+
+
+    
+def polygon_selected():
+    """ This function fetches and returns value of selected polygon if it exists """
+    selected_global_polygon =  get_global_result("global_selected_polygon")
+    selected_global_polygon_type =  get_global_result("global_selected_polygon_type")
+    
+    
+    if selected_global_polygon_type and selected_global_polygon_type == "All":
+         # return whole thing if all is selected
+        return gpd_df
+        
+    elif selected_global_polygon and selected_global_polygon_type == "Selected":
+        try:
+            identifer_key = list(selected_global_polygon.keys())[0]
+            if identifer_key:
+                gpd_df_sub = gpd_df[gpd_df[identifer_key] == selected_global_polygon[identifer_key]]
+                # find and return selected polygon 
+                return gpd_df_sub
+        except Exception as e:
+            # return all of it  or return None (if something goes wrong)?
+            return selected_global_polygon
+    
+    # returns None if cant find setr selected polygon values
+    return None
+
 
 
 def convert_timestamps_to_strings(df):
@@ -114,28 +160,37 @@ def area_selection():
             get_polygon.options = []
             get_polygon.value = None
 
+    style = {'description_width': 'initial'}
+    
     # Dropdown for selecting vector type
     get_type = widgets.Dropdown(
         options=list(vector_types_dict.keys()),
         value=list(vector_types_dict.keys())[0],
         default="User uploads",
-        description="Type",
+        description="Select Type",
         disabled=False,
+        layout=Layout(width='40%'),
+        style=style
     )
 
     # Dropdown for selecting shapefile
     get_shapefile = widgets.Dropdown(
         options=[],
-        description="Vector",
+        description="Choose Vector",
         disabled=False,
+        layout=Layout(width='40%'),
+        style=style
     )
 
     # Dropdown for selecting polygon
+    global get_polygon
     get_polygon = widgets.Dropdown(
         options=[],
         description="Select a polygon",
         disabled=False,
         default="",
+        layout=Layout(width='40%'),
+        style=style
     )
 
     # Observe changes and update accordingly
@@ -160,7 +215,13 @@ def area_selection():
     update_shapefiles()
 
     # Display the dropdowns and reset button
-    return get_type, get_shapefile, get_polygon, reset_button
+    display(get_type)
+    display(get_shapefile)
+    display(get_polygon)
+    display(reset_button)
+    # return get_type, get_shapefile, get_polygon, reset_button
+    
+    return get_polygon
 
 
 def static_polygon_plot(get_polygon):
@@ -217,6 +278,9 @@ def static_polygon_plot(get_polygon):
     return gpd_df_sub
 
 
+
+
+
 def interactive_polygon_plot(gpd_df_sub):
     """
     Produces an interactive plot of a given polygon
@@ -255,17 +319,27 @@ def interactive_polygon_plot(gpd_df_sub):
 
     # Function to handle click events and store the selected polygon
     def handle_click(event, feature, **kwargs):
+        html.value = f"<b style='color:black'> Identifying selected area please wait .... </b> <br>"
         selected_polygon = feature["properties"]
         # Update the style of the selected polygon
         update_polygon_style(feature)
-
-        html.value = f"<b>Selected Polygon:</b> {selected_polygon}"
+        html.value = f"<b style='color:orange'>Selected Polygon: </b> <br> {selected_polygon}"
+        set_global_result("global_selected_polygon", selected_polygon)
+        set_global_result("global_selected_polygon_type", "Selected")
 
 
     # Function to confirm and rename the output to AREA_selection
     def confirm_selection(button):
         AREA_SELECTION = AREA_SELECTION
         print("The selected area has been confirmed as 'AREA_SELECTION'")
+        
+    
+    # Function to select all polyons 
+    def confirm_select_all(button):
+        html.value = "<b style='color:orange'>  All polygons currently selected <b>"
+        set_global_result("global_selected_polygon", gpd_df_sub)
+        set_global_result("global_selected_polygon_type", "All")
+        print("All polygon selected")
 
     # Calculate the bounding box
     bounds = gpd_df_sub.total_bounds  # returns (minx, miny, maxx, maxy)
@@ -284,13 +358,18 @@ def interactive_polygon_plot(gpd_df_sub):
     # Create a button for confirming the selection
     confirm_button = widgets.Button(description="CONFIRM")
     confirm_button.on_click(confirm_selection)
+    
+    
+    #use all polygon button
+    select_all_poly_button = widgets.Button(description="USE ALL POLYGONS")
+    select_all_poly_button.on_click(confirm_select_all)
 
     # Display the instructions, button, and map
     # instructions = widgets.HTML("<b>If you are happy with the entire areas shown please click 'Confirm'.<br>If you want to select a specific polygon please click on the map.</b>")
     # display(widgets.VBox([instructions, confirm_button]))
     # HTML widget to display selected shapefile information
     html = widgets.HTML()
-    html.value = "All polygons selected"
+    html.value = "<b style='color:orange'> All polygons currently selected <b>"
 
     # Create GeoData layer
     geo_data = ipyleaflet.GeoData(
@@ -333,11 +412,16 @@ def interactive_polygon_plot(gpd_df_sub):
         widgets.VBox(
             [
                 widgets.HTML(
-                    "<b>If you are happy with the entire areas shown please click 'Confirm'.<br>If you want to select a specific polygon please click on the map.</b>"
+                    "<b>If you are happy with the entire areas shown please click <span style='color:orange'>'USE ALL POLYGONS' </span>.<br>If you want to select a specific polygon please click on the map, to select area and <span style='color:orange'> wait for <span style='color:#5a5c5a'> 'Selected Polygon' </span> confirmation below.<span>  </b>"
                 ),
                 html,
-                confirm_button,
+                # confirm_button,
+                select_all_poly_button,
                 m,
             ]
         )
     )
+
+
+
+
