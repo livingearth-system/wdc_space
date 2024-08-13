@@ -8,17 +8,26 @@ Authors: Abigail Sanders, Dan Clewley, Emmanuel Nwokocha.
 
 """
 
+
+
+
+
+
+
 import glob
 import os
 import pandas as pd
 import geopandas as gpd
 import ipywidgets as widgets
 import ipyleaflet
+from ipyleaflet import Map, GeoData, LayersControl, FullScreenControl, DrawControl, basemaps
 from IPython.display import display
 import matplotlib.pyplot as plt
-from ipywidgets import Layout, IntProgress
+from ipywidgets import Layout, IntProgress, VBox, HTML, Button
 import threading
-
+from shapely.geometry import shape
+from shapely.ops import transform
+import pyproj
 
 import time
 
@@ -52,9 +61,12 @@ global get_polygon
 
 # instantiate variables
 RESULTS = {}
-RESULTS["global_selected_polygon"] = None
+RESULTS["global_selected_polygon"] = None  
+RESULTS["global_area_selection_type"] = None  # options are 1. Draw: if selection method is to draw on map  2. Select: if selection method is to select from map or shp file.
+RESULTS["global_selected_area"] = None  # for drawn area from map
 RESULTS["global_selected_polygon_type"] = None  # options are All: if all is selected and Selected: if a single one is selected
 RESULTS["get_polygon"] = None
+RESULTS["area_selection_type"] = None
 AREA_SELECTION = None
 selected_polygon = None
 
@@ -76,28 +88,38 @@ def polygon_selected():
     """ This function fetches and returns value of selected polygon if it exists """
     selected_global_polygon =  get_global_result("global_selected_polygon", RESULTS)
     selected_global_polygon_type =  get_global_result("global_selected_polygon_type", RESULTS)
+    global_area_selection_type =  get_global_result("global_area_selection_type", RESULTS)
+    
+
+    # get and retrun user drawn polygon from map 
+    if global_area_selection_type and global_area_selection_type == "Draw":
+        drawn_polygon = get_global_result("global_selected_area", RESULTS)
+        return  drawn_polygon
+    
+    # get and return user selected polygon area(s)
+    elif global_area_selection_type and global_area_selection_type == "Select":
         
-    if selected_global_polygon_type and selected_global_polygon_type == "All":
-         # return whole geodataframe selected  if all is selected
-        get_polygon = get_global_result("get_polygon", RESULTS)
-        if get_polygon and get_polygon.value is not None:
-            gpd_df_sub = gpd_df[gpd_df[col_name_var] == get_polygon.value]
-            return gpd_df_sub
-        else:
-            gpd_df_sub = gpd_df
-            return gpd_df_sub
-        
-    elif selected_global_polygon and selected_global_polygon_type == "Selected":
-        try:
-            # fetch object identifier from selected_polygon dict
-            identifer_key = list(selected_global_polygon.keys())[0]
-            if identifer_key:
-                gpd_df_sub = gpd_df[gpd_df[identifer_key] == selected_global_polygon[identifer_key]]
-                # find and return selected polygon 
+        if selected_global_polygon_type and selected_global_polygon_type == "All":
+             # return whole geodataframe selected  if all is selected
+            get_polygon = get_global_result("get_polygon", RESULTS)
+            if get_polygon and get_polygon.value is not None:
+                gpd_df_sub = gpd_df[gpd_df[col_name_var] == get_polygon.value]
                 return gpd_df_sub
-        except Exception as e:
-            # return all of it  or return None (if something goes wrong)?
-            return selected_global_polygon
+            else:
+                gpd_df_sub = gpd_df
+                return gpd_df_sub
+
+        elif selected_global_polygon and selected_global_polygon_type == "Selected":
+            try:
+                # fetch object identifier from selected_polygon dict
+                identifer_key = list(selected_global_polygon.keys())[0]
+                if identifer_key:
+                    gpd_df_sub = gpd_df[gpd_df[identifer_key] == selected_global_polygon[identifer_key]]
+                    # find and return selected polygon 
+                    return gpd_df_sub
+            except Exception as e:
+                # return all of it  or return None (if something goes wrong)?
+                return selected_global_polygon
     # returns None if cant find set selected polygon values
     return None
 
@@ -182,7 +204,7 @@ def area_selection():
         options=list(vector_types_dict.keys()),
         value=list(vector_types_dict.keys())[0],
         default="User uploads",
-        description="Select Type",
+        description="Area Selection Type",
         disabled=False,
         layout=Layout(width='40%'),
         style=style
@@ -237,10 +259,27 @@ def area_selection():
     # return get_type, get_shapefile, get_polygon, reset_button
     
     set_global_result("get_polygon", get_polygon, RESULTS)
+    set_global_result("area_selection_type", get_type, RESULTS)
     return get_polygon
 
 
-def static_polygon_plot(get_polygon):
+
+def view_selected_polygon(selected_polygon):
+    """
+    returns a geodataframe of the selected polygon 
+    """
+    if selected_polygon.value is not None:
+        gpd_df_sub = gpd_df[gpd_df[col_name_var] == selected_polygon.value]
+        polygon_name = selected_polygon.value
+    else:
+        gpd_df_sub = gpd_df
+        polygon_name = "All"
+
+    return gpd_df_sub
+
+
+# formally called:  static_polygon_plot
+def plot_selected_polygon(selected_polygon):
     """
     Produces a static plot of a given polygon
     """
@@ -265,9 +304,9 @@ def static_polygon_plot(get_polygon):
     progress_thread = threading.Thread(target=update_progress_bar)
     progress_thread.start()
 
-    if get_polygon.value is not None:
-        gpd_df_sub = gpd_df[gpd_df[col_name_var] == get_polygon.value]
-        polygon_name = get_polygon.value
+    if selected_polygon.value is not None:
+        gpd_df_sub = gpd_df[gpd_df[col_name_var] == selected_polygon.value]
+        polygon_name = selected_polygon.value
     else:
         gpd_df_sub = gpd_df
         polygon_name = "All"
@@ -321,7 +360,51 @@ def static_polygon_plot(get_polygon):
 
 
 
-def interactive_polygon_plot(gpd_df_sub):
+def mapper_preprocessor(geopandas_dataframe):
+    """
+    Prepares the vector geopandas dataframe ready for mapping
+    """
+    # Set the GeoDataFrame  to geographic CRS for plotting
+    geopandas_dataframe = geopandas_dataframe.to_crs(epsg=4326)
+    return geopandas_dataframe
+
+
+
+
+
+def map_and_select_area(selected_polygon):
+    # fetch geodataframe of selected polygon
+    if selected_polygon.value is not None:
+        gpd_df_sub = gpd_df[gpd_df[col_name_var] == selected_polygon.value]
+        polygon_name = selected_polygon.value
+    else:
+        gpd_df_sub = gpd_df
+        polygon_name = "All"
+        
+    gpd_df_sub = mapper_preprocessor(gpd_df_sub)
+                
+    # identify if DRAW ON MAP or others 
+    area_selection_type = get_global_result("area_selection_type", RESULTS)
+    if area_selection_type and area_selection_type.value:
+        if area_selection_type.value.endswith("Draw an area"):
+            # set global area selection type to: Draw
+            set_global_result("global_area_selection_type", "Draw", RESULTS)
+            # show map to draw area
+            draw_site_from_map(gpd_df_sub)
+        else: 
+            # set global area selection type to: Select
+            set_global_result("global_area_selection_type", "Select", RESULTS)
+            # show interactive map to select site from 
+            select_site_from_map(gpd_df_sub)
+
+    else:
+        print("Unidentified Area Selection Type")
+        return None
+    
+    
+
+
+def select_site_from_map(gpd_df_sub):
     """
     Produces an interactive plot of a given polygon
     """
@@ -374,7 +457,7 @@ def interactive_polygon_plot(gpd_df_sub):
         html.value = "<b style='color:orange'>  All polygons currently selected <b><br>"
         set_global_result("global_selected_polygon", gpd_df_sub, RESULTS)
         set_global_result("global_selected_polygon_type", "All", RESULTS)
-        print("All polygon selected")
+     
 
     # ================ add progress bar =========
     progress_value = IntProgress(min=0, max=100) # instantiate the bar
@@ -496,3 +579,170 @@ def interactive_polygon_plot(gpd_df_sub):
 
 
 
+
+    
+# ==================  Draw site from map 
+
+
+def draw_site_from_map(gpd_df_sub):
+    """
+    This function will allow users to draw interested  site area from the welsh boundry 
+    """
+    stop_thread = threading.Event()  # Event to signal the thread to stop
+    # Function to handle area selection
+    def handle_draw(self, action, geo_json):
+        global selected_area
+        selected_area = geo_json['geometry']
+        html.value = f"<b> <span style='color:orange' >Selected area: </span>     <br> {selected_area}</b>"
+        set_global_result("global_selected_area", selected_area, RESULTS)
+    
+    # ================ add progress bar =========
+    progress_value = IntProgress(min=0, max=100) # instantiate the bar
+    print("Generating Interactive Map ...")
+    display(progress_value) # display the progress  bar as a widget
+
+    def update_progress_bar():
+        """Continuously update the progress bar until the map is ready."""
+        progress = 0
+        while not stop_thread.is_set():  # Continue until stop signal is received
+            progress_value.value = progress % 100
+            progress += 1
+            time.sleep(0.2)
+        progress_value.value = 100  #
+    
+    # Start progress bar in a separate thread
+    progress_thread = threading.Thread(target=update_progress_bar)
+    progress_thread.start()
+        
+    boundary = gpd_df_sub
+
+    # HTML widget to display selected area information
+    html = HTML()
+    html.value = "<b> Draw an area on the map below within the highlighted boundry, to select it.</b>"
+
+    # Create GeoData layer for the boundary
+    geo_data = GeoData(
+        geo_dataframe=boundary,
+        style={'color': 'red', 'fillColor': 'none', 'opacity': 1, 'weight': 2},
+        name='Boundary'
+    )
+
+    # Create a map centered on the boundary with appropriate zoom
+    bounds = boundary.total_bounds  # returns (minx, miny, maxx, maxy)
+    center = [(bounds[1] + bounds[3]) / 2, (bounds[0] + bounds[2]) / 2]
+    m = Map(center=center, zoom=8, basemap=basemaps.Esri.WorldImagery, layout=Layout(height='600px'))
+
+    # Add GeoData layer to the map
+    m.add_layer(geo_data)
+
+    # Add drawing tools to the map
+    draw_control = DrawControl(
+        polygon={"shapeOptions": {"color": "#ff0000", "weight": 4}},
+        polyline={"shapeOptions": {"color": "#ff0000", "weight": 4}},
+        circle={"shapeOptions": {"color": "#ff0000", "weight": 4}},
+        rectangle={"shapeOptions": {"color": "#ff0000", "weight": 4}},
+        marker={"shapeOptions": {"color": "#ff0000", "weight": 4}}
+    )
+
+    draw_control.on_draw(handle_draw)
+    m.add_control(draw_control)
+
+    # Add controls to the map
+    m.add_control(LayersControl(position='topright'))
+    m.add_control(FullScreenControl())
+
+    # Display the initial map with the HTML widget
+    display(VBox([html, m]))
+
+    # Initialize selected_area variable
+    selected_area = None
+    # Stop progress thread
+    stop_thread.set()
+    # Ensure progress thread has finished before exiting function
+    progress_thread.join()
+    
+    
+
+    
+# ========================= Visualize selection  ======================== 
+
+
+# Function to visualize the selected area on a new map
+def visualize_selected_area():
+    
+    """ This function visualizes drawn selected area """
+    selected_global_polygon =  get_global_result("global_selected_polygon", RESULTS)
+    global_area_selection_type =  get_global_result("global_area_selection_type", RESULTS)
+    global_area_selection = get_global_result("global_selected_area", RESULTS)
+    
+
+    # get and retrun user drawn polygon from map 
+    if global_area_selection_type and global_area_selection_type == "Draw":
+        drawn_polygon = get_global_result("global_selected_area", RESULTS)
+            
+        if drawn_polygon:
+            selected_area = drawn_polygon
+            # Convert the selected area to a GeoDataFrame
+            selected_geom = shape(selected_area)
+            selected_gdf = gpd.GeoDataFrame({'geometry': [selected_geom]}, crs='epsg:4326')
+
+            # Calculate the area in hectares
+            proj = pyproj.Transformer.from_crs('epsg:4326', 'epsg:3857', always_xy=True).transform
+            selected_gdf['area_ha'] = selected_gdf['geometry'].apply(lambda geom: transform(proj, geom).area / 10000)
+            area_ha = selected_gdf['area_ha'].iloc[0]
+
+            # Transform shapefile boundaries into geographic data (and affect a style)
+            geo_data = GeoData(
+                geo_dataframe=selected_gdf,
+                style={
+                    "color": "black",
+                    "fillColor": "#3366cc",
+                    "opacity": 0.05,
+                    "weight": 1.9,
+                    "dashArray": "2",
+                    "fillOpacity": 0.6,
+                },
+                hover_style={"fillColor": "red", "fillOpacity": 0.2},
+                name="Selected Area",
+            )
+
+            # Calculate the center of the selected area
+            bounds = selected_gdf.total_bounds  # returns (minx, miny, maxx, maxy)
+            center = [(bounds[1] + bounds[3]) / 2, (bounds[0] + bounds[2]) / 2]
+
+            # Create a map centered on the selected area
+            selected_map = Map(center=center, zoom=10, basemap=basemaps.Esri.WorldImagery, layout=Layout(height='600px'))
+
+            # Add GeoData layer to the map
+            selected_map.add_layer(geo_data)
+
+            # Fit map to bounds
+            sw = [bounds[1], bounds[0]]  # southwest corner (miny, minx)
+            ne = [bounds[3], bounds[2]]  # northeast corner (maxy, maxx)
+            selected_map.fit_bounds([sw, ne])
+
+            # Add controls to the map
+            selected_map.add_control(LayersControl(position='topright'))
+            selected_map.add_control(FullScreenControl())
+
+            # Function to confirm and rename the output to AREA_selection
+            def confirm_selection(button):
+                global AREA_selection
+                AREA_selection = selected_gdf
+                display(HTML("<b>The selected area has been confirmed as AREA_selection</b>"))
+
+            # Create a button for confirming the selection
+            confirm_button = Button(description="CONFIRM")
+            confirm_button.on_click(confirm_selection)
+
+            # Display the map, button, and area in hectares
+            display(VBox([HTML("<b>If you are happy with this AREA please confirm before continuing</b>"), confirm_button, selected_map, HTML(f"Selected area: {area_ha:.2f} hectares")]))
+        else:
+            display(HTML("No area selected."))
+    else: 
+        display(HTML("<b>No visuals: Selected area was not drawn from map. Below is the currently selected area details</b>"))
+        selected_area = polygon_selected()
+        return selected_area
+    
+# # Example: Visualize the selected area stored in 'selected_area' from PART 2
+# visualize_selected_area(selected_area)
