@@ -17,9 +17,10 @@ import ipyleaflet
 from ipyleaflet import Map, GeoData, LayersControl, FullScreenControl, DrawControl, basemaps
 from IPython.display import display, clear_output
 import matplotlib.pyplot as plt
-from ipywidgets import Layout, IntProgress, VBox, HTML, Button
+from ipywidgets import RadioButtons, BoundedFloatText, Layout, IntProgress, VBox, HBox, HTML, Button
 import threading
-from shapely.geometry import shape
+from shapely.geometry import shape, mapping
+
 from shapely.ops import transform
 import pyproj
 
@@ -52,6 +53,8 @@ global AREA_SELECTION
 global selected_polygon
 global RESULTS
 global get_polygon
+global buffer_distance
+global confirmed_buffer_distance
 
 
 # instantiate variables
@@ -64,6 +67,7 @@ RESULTS["global_selected_area"] = None  # for drawn area from map
 RESULTS["global_selected_polygon_type"] = None  # options are All: if all is selected and Selected: if a single one is selected
 RESULTS["get_polygon"] = None
 RESULTS["area_selection_type"] = None
+RESULTS["buffer_distance"] = 100
 AREA_SELECTION = None
 selected_polygon = None
 
@@ -73,7 +77,7 @@ def helper():
     """This method will display all the available method and usage snippet to the user """
     html = widgets.HTML()
     docs = """
-    <p> <b style='color:black'> List of available commands for selection geographic area for analysis </b> </p>
+    <p> <b style='color:black'> List of available commands for selecting geographic sites for analysis </b> </p>
     <p style='color:black'>Example commands and description: 
     
     <br> 
@@ -153,15 +157,11 @@ def polygon_selected():
                 
                 
                 # Option 3: fetch object iuse geometry to pick 
-                # print("selected polygon is" , shape(selected_global_polygon_geomvalue)
-#                 print("we are in selected")
+
 #                 if selected_global_polygon_geomvalue:
-#                     print("found geom")
 #                     selected_geometry = shape(selected_global_polygon_geomvalue)
 #                     # gpd_df_sub = gpd_df[gpd_df["geometry"].apply(lambda x: x.equals(selected_geometry))]
 #                     gpd_df_sub = gpd_df[gpd_df["geometry"].intersects(selected_geometry)]
-#                     print("All is ", gpd_df) 
-#                     print("filtered is ", gpd_df_sub)                  
 #                     return gpd_df_sub
 #                 else:
 #                     print("no geom value")
@@ -169,12 +169,16 @@ def polygon_selected():
         
             except Exception as e:
                 print("error occured", e)
-                # return all of it  or return None (if something goes wrong)?
-                if not selected_global_polygon:
-                    print("No polygon currently selected. Run map_and_select_area(polygon_select), click/draw and confirm area on map")
-                return selected_global_polygon
-    # returns None if cant find set selected polygon values
-    
+
+    # returns None set read drop down value
+    if not selected_global_polygon:
+        get_polygon_dropdown =  get_global_result("get_polygon", RESULTS)
+        polygon_dropdown_value = get_polygon_dropdown.value
+        if polygon_dropdown_value is not None:
+            gpd_df_sub = gpd_df[gpd_df[col_name_var] == polygon_dropdown_value]
+            return gpd_df_sub
+        else:
+            print("Polygon not set")
     print("No polygon currently selected. Run map_and_select_area(polygon_select), click/draw and confirm area on map")
     return None
 
@@ -581,14 +585,6 @@ def select_site_from_map(gpd_df_sub):
     def handle_click(event, feature, **kwargs):
         html.value = f"<b style='color:orange'> Identifying selected area please wait .... </b> <br><br>"
         global selected_polygon
-        
-            # Write the feature information to a file
-        with open('tester.txt', 'w+') as file:
-            file.write(f"These are what we setting: {feature}\n\n")
-        
-        print("feature writen to file")
-            
-            
         selected_polygon = feature["properties"]
         selected_polygon_geomvalue = feature["geometry"]
         # Update the style of the selected polygon
@@ -745,7 +741,7 @@ def visualize_selected_area():
     # get and retrun user drawn polygon from map 
     if global_area_selection_type and global_area_selection_type == "Draw":
         drawn_polygon = get_global_result("global_selected_area", RESULTS)
-            
+
         if drawn_polygon:
             selected_area = drawn_polygon
             # Convert the selected area to a GeoDataFrame
@@ -802,13 +798,277 @@ def visualize_selected_area():
             confirm_button.on_click(confirm_selection)
 
             # Display the map, button, and area in hectares
-            display(VBox([HTML("<b>If you are happy with this AREA please confirm before continuing</b>"), confirm_button, selected_map, HTML(f"Selected area: {area_ha:.2f} hectares")]))
+            display(VBox([HTML("<b>If you are happy with this AREA please confirm before continuing</b>"), selected_map, HTML(f"Selected area: {area_ha:.2f} hectares")]))
         else:
             display(HTML("No area selected."))
     else: 
-        display(HTML("<b>No visuals: Selected area was not drawn from map. Below is the currently selected area details</b>"))
+        display(HTML("<b> <span style='color:orange'> No visuals </span>: Selected area was not drawn from map. Below is the currently selected area details</b>"))
         selected_area = polygon_selected()
         return selected_area
     
 # # Example: Visualize the selected area stored in 'selected_area' from PART 2
 # visualize_selected_area(selected_area)
+
+
+
+# ================================= Add a buffer including your site ========================================== 
+
+# Global variable for buffer distance
+buffer_distance = 100
+
+
+# Radio buttons widget for selecting buffer distance
+buffer_distance_options = RadioButtons(
+    options=[('100m', 100), ('500m', 500), ('1km', 1000), ('5km', 5000), ('10km', 10000), ('25km', 25000), ('50km', 50000), ('CUSTOM', 'CUSTOM')],
+    value=100,
+    description='Buffer Distance:',
+    layout=Layout(width='300px')  # Set the width of the widget
+)
+
+
+def active_buffer():
+    selected_buffer = get_global_result("buffer_distance", RESULTS)
+    if selected_buffer:
+        in_km = int(selected_buffer)/1000
+        in_meters = int(selected_buffer)
+        buffer_to_display = f"{in_km} km ({in_meters} meters)"
+    else:
+        buffer_to_display = "Not Selected"
+        
+    html = widgets.HTML()
+    docs = f""" <p style='color:black'>  Buffer distance:  <b style='color:'>  {buffer_to_display} </b>  </p>"""
+    html.value = docs
+    display(html)
+    
+
+# Function to handle custom buffer distance input
+def on_custom_buffer_distance_change(change):
+    buffer_distance = change['new'] * 1000  # Convert km to meters
+    set_global_result("buffer_distance", buffer_distance, RESULTS)
+
+
+# Function to handle buffer distance selection
+def on_buffer_distance_change(change):
+    if change['new'] == 'CUSTOM':
+        custom_buffer_distance.layout.display = ''  # Show custom distance input
+    else:
+        custom_buffer_distance.layout.display = 'none'  # Hide custom distance input
+        if change.get("new"):
+            buffer_distance = change.get("new")
+            set_global_result("buffer_distance", buffer_distance, RESULTS) 
+
+
+# Function to create buffer and display it on a map
+def create_and_display_buffer(area_gdf, buffer_distance):
+    
+     # Check if area_gdf is a GeoPandas DataFrame
+    if isinstance(area_gdf, gpd.GeoDataFrame):
+        selected_geom = area_gdf.iloc[0].geometry
+        
+    # If area_gdf is a dictionary representing a geometry
+    elif isinstance(area_gdf, dict) and 'type' in area_gdf and 'coordinates' in area_gdf:
+        # Convert dictionary to a GeoPandas DataFrame
+        geom = shape(area_gdf)
+        area_gdf = gpd.GeoDataFrame({'geometry': [geom]})
+        selected_geom = area_gdf.iloc[0].geometry
+    else:
+        raise ValueError("Invalid input: area_gdf must be a GeoPandas DataFrame or a valid GeoJSON-like dictionary.")
+        
+    
+    if area_gdf is not None and not area_gdf.empty:
+        # Use the geometry of the first (and only) feature in the GeoDataFrame
+        selected_geom = area_gdf.iloc[0].geometry
+        
+        # Reproject the geometry to EPSG:3857 for buffering in meters
+        proj = pyproj.Transformer.from_crs('epsg:4326', 'epsg:3857', always_xy=True).transform
+        reprojected_geom = transform(proj, selected_geom)
+        
+        # Create buffer around the reprojected geometry
+        buffer_geom = reprojected_geom.buffer(buffer_distance)
+        
+        # Reproject the buffer back to EPSG:4326
+        proj_back = pyproj.Transformer.from_crs('epsg:3857', 'epsg:4326', always_xy=True).transform
+        buffer_geom = transform(proj_back, buffer_geom)
+        
+        # Convert the buffer to a GeoDataFrame
+        AREA_BufferA = gpd.GeoDataFrame({'geometry': [buffer_geom]}, crs='epsg:4326')
+        
+        # Create GeoData layer for the selected area
+        selected_geo_data = GeoData(
+            geo_dataframe=area_gdf,
+            style={
+                "color": "black",
+                "fillColor": "#3366cc",
+                "opacity": 0.05,
+                "weight": 1.9,
+                "dashArray": "2",
+                "fillOpacity": 0.6,
+            },
+            hover_style={"fillColor": "red", "fillOpacity": 0.2},
+            name="Selected Area",
+        )
+        
+        # Create GeoData layer for the buffer area
+        buffer_geo_data = GeoData(
+            geo_dataframe=AREA_BufferA,
+            style={
+                "color": "black",
+                "fillColor": "#ffcc00",
+                "opacity": 0.5,
+                "weight": 1.9,
+                "dashArray": "2",
+                "fillOpacity": 0.3,
+            },
+            hover_style={"fillColor": "red", "fillOpacity": 0.2},
+            name="Buffer Area",
+        )
+        
+        # Calculate the center of the buffer area
+        bounds = AREA_BufferA.total_bounds  # returns (minx, miny, maxx, maxy)
+        center = [(bounds[1] + bounds[3]) / 2, (bounds[0] + bounds[2]) / 2]
+        
+        # Create a map centered on the buffer area
+        buffer_map = Map(center=center, zoom=10, basemap=basemaps.Esri.WorldImagery, layout=Layout(height='600px'))
+        
+        # Add GeoData layers to the map
+        buffer_map.add_layer(selected_geo_data)
+        buffer_map.add_layer(buffer_geo_data)
+        
+        # Fit map to bounds
+        sw = [bounds[1], bounds[0]]  # southwest corner (miny, minx)
+        ne = [bounds[3], bounds[2]]  # northeast corner (maxy, maxx)
+        buffer_map.fit_bounds([sw, ne])
+        
+        # Add controls to the map
+        buffer_map.add_control(LayersControl(position='topright'))
+        buffer_map.add_control(FullScreenControl())
+        
+        # Display the map
+        display(buffer_map)
+        
+        # Function to confirm and  buffer selection
+        def confirm_buffer_selection(button):
+            # AREA_selection = area_gdf
+            geometry = AREA_BufferA.loc[0, 'geometry']
+            # Convert to GeoJSON-like dictionary
+            buffered_area_togeojson = geometry.__geo_interface__
+            set_global_result("global_selected_area", buffered_area_togeojson, RESULTS)
+
+
+        # Create a button for confirming the buffer as the selection
+        confirm_selection_button = Button(description="CONFIRM BUFFER")
+        confirm_selection_button.on_click(confirm_buffer_selection)
+
+        # Display the instructions, button, and map
+        instructions = HTML("<b>If applied buffer to site selection is good, click  <span style='color:orange'> CONFIRM BUFFER </span> button below. <br> If more buffer is needed change the value selected from 'include_buffer()'. </b>")
+        display(VBox([instructions, confirm_selection_button]))
+
+    else:
+        display(HTML("No area selected."))
+
+
+
+# Function to confirm buffer distance selection
+def on_confirm_button_clicked(b):
+    selected_buffer = get_global_result("buffer_distance", RESULTS)
+    confirmed_buffer_distance = selected_buffer
+    set_global_result("confirmed_buffer_distance", confirmed_buffer_distance, RESULTS)
+    
+
+    
+
+style = {'description_width': 'initial'}          
+# Text box for custom buffer distance
+custom_buffer_distance = BoundedFloatText(
+    value=1,
+    min=0.001,
+    max=100,
+    step=0.1,
+    description='Custom (km): Maximum = 100km',
+    # layout=Layout(width='200px')  # Set the width of the widget
+       layout=Layout(width='40%'),
+        style=style
+)
+custom_buffer_distance.layout.display = 'none'  # Hide initially   
+        
+# Button to confirm buffer distance selection
+confirm_button = Button(description="Confirm Buffer Distance")
+confirm_button.on_click(on_confirm_button_clicked) 
+
+
+        
+def include_buffer():
+    """When called will show options to add buffer to selected site including the site selection."""
+    global_area_selection_type = get_global_result("global_area_selection_type", RESULTS)
+    if global_area_selection_type and (global_area_selection_type != "Draw"):
+        html = widgets.HTML()
+        docs = f""" <b style='color:black'>  Buffers can only be applied on map-drawn areas. Draw area on map using 'notebook_dropdowns.map_and_select_area(polygon_select)' to apply buffer  </b>"""
+        html.value = docs
+        display(html)
+        return None 
+    # Display widgets
+    display(VBox([buffer_distance_options, custom_buffer_distance, confirm_button]))
+    # Observe changes
+    buffer_distance_options.observe(on_buffer_distance_change, names='value')
+    custom_buffer_distance.observe(on_custom_buffer_distance_change, names='value')
+    # Initialize buffer_distance variable
+    buffer_distance = 100
+    confirmed_buffer_distance = buffer_distance  # Initialize confirmed buffer distance
+    
+    
+
+
+def buffer_include_selection():
+    """Adds set buffer to stored area selection"""
+    # Fetch set selected area 
+    polygon_select = polygon_selected()
+    # Fetch set selected buffer
+    selected_buffer = get_global_result("buffer_distance", RESULTS)
+    selected_global_polygon_type = get_global_result("global_selected_polygon_type", RESULTS)
+    global_area_selection_type = get_global_result("global_area_selection_type", RESULTS)
+    
+    # Check if polygon_select is not None and selected_buffer is set
+    if polygon_select is not None and selected_buffer:
+        # If polygon_select is a GeoPandas DataFrame
+        if isinstance(polygon_select, gpd.GeoDataFrame):
+            if not polygon_select.empty:
+                # Convert the first geometry to GeoJSON-like dict
+                polygon_select = mapping(polygon_select.iloc[0].geometry)
+            else:
+                print("The GeoDataFrame is empty. No valid area selected.")
+                return None
+        # Pass the (possibly converted) polygon_select to create_and_display_buffer
+        if global_area_selection_type and (global_area_selection_type == "Draw"):
+            create_and_display_buffer(polygon_select, selected_buffer)
+        else:
+            print("Buffers can only be applied on map drawn areas for now. Draw area on map to apply buffer")
+            return None                               
+    else:
+        print("No area or buffer selection set")
+        return None
+
+
+
+
+def buffer_exclude_selection():
+        """ When called will show options to add buffer to selected site excluding the site selection"""
+        pass
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
