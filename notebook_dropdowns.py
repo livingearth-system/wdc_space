@@ -8,12 +8,6 @@ Authors: Abigail Sanders, Dan Clewley, Emmanuel Nwokocha.
 
 """
 
-
-
-
-
-
-
 import glob
 import os
 import pandas as pd
@@ -21,13 +15,14 @@ import geopandas as gpd
 import ipywidgets as widgets
 import ipyleaflet
 from ipyleaflet import Map, GeoData, LayersControl, FullScreenControl, DrawControl, basemaps
-from IPython.display import display
+from IPython.display import display, clear_output
 import matplotlib.pyplot as plt
 from ipywidgets import Layout, IntProgress, VBox, HTML, Button
 import threading
 from shapely.geometry import shape
 from shapely.ops import transform
 import pyproj
+
 
 import time
 
@@ -61,7 +56,9 @@ global get_polygon
 
 # instantiate variables
 RESULTS = {}
-RESULTS["global_selected_polygon"] = None  
+RESULTS["global_selected_polygon"] = None
+RESULTS["global_selected_polygon_geomvalue"] = None  ## the geometry value of selected polygon
+
 RESULTS["global_area_selection_type"] = None  # options are 1. Draw: if selection method is to draw on map  2. Select: if selection method is to select from map or shp file.
 RESULTS["global_selected_area"] = None  # for drawn area from map
 RESULTS["global_selected_polygon_type"] = None  # options are All: if all is selected and Selected: if a single one is selected
@@ -115,10 +112,10 @@ def get_global_result(key, results_dict):
 def polygon_selected():
     """ This function fetches and returns value of selected polygon if it exists """
     selected_global_polygon =  get_global_result("global_selected_polygon", RESULTS)
+    selected_global_polygon_geomvalue =  get_global_result("global_selected_polygon_geomvalue", RESULTS)
     selected_global_polygon_type =  get_global_result("global_selected_polygon_type", RESULTS)
     global_area_selection_type =  get_global_result("global_area_selection_type", RESULTS)
     
-
     # get and retrun user drawn polygon from map 
     if global_area_selection_type and global_area_selection_type == "Draw":
         drawn_polygon = get_global_result("global_selected_area", RESULTS)
@@ -139,20 +136,46 @@ def polygon_selected():
 
         elif selected_global_polygon and selected_global_polygon_type == "Selected":
             try:
-                # fetch object identifier from selected_polygon dict
-                identifer_key = list(selected_global_polygon.keys())[0]
-                if identifer_key:
-                    gpd_df_sub = gpd_df[gpd_df[identifer_key] == selected_global_polygon[identifer_key]]
+          
+                # Option1: fetch object using fid
+                identifier = selected_global_polygon.get("fid", None)
+                if identifier:
                     # find and return selected polygon 
+                    gpd_df_sub = gpd_df[gpd_df["fid"] == identifier]
                     return gpd_df_sub
+                
+                # Option2: fetch object identifier from selected_polygon dict
+                # identifier_key = list(selected_global_polygon.keys())[0]
+                # if identifier_key:
+                #     gpd_df_sub = gpd_df[gpd_df[identifier_key] == selected_global_polygon[identifier_key]]
+                #     # find and return selected polygon 
+                #     return gpd_df_sub
+                
+                
+                # Option 3: fetch object iuse geometry to pick 
+                # print("selected polygon is" , shape(selected_global_polygon_geomvalue)
+#                 print("we are in selected")
+#                 if selected_global_polygon_geomvalue:
+#                     print("found geom")
+#                     selected_geometry = shape(selected_global_polygon_geomvalue)
+#                     # gpd_df_sub = gpd_df[gpd_df["geometry"].apply(lambda x: x.equals(selected_geometry))]
+#                     gpd_df_sub = gpd_df[gpd_df["geometry"].intersects(selected_geometry)]
+#                     print("All is ", gpd_df) 
+#                     print("filtered is ", gpd_df_sub)                  
+#                     return gpd_df_sub
+#                 else:
+#                     print("no geom value")
+#                     return None
+        
             except Exception as e:
+                print("error occured", e)
                 # return all of it  or return None (if something goes wrong)?
                 if not selected_global_polygon:
                     print("No polygon currently selected. Run map_and_select_area(polygon_select), click/draw and confirm area on map")
                 return selected_global_polygon
     # returns None if cant find set selected polygon values
     
-    print("No polygon currently selected. Run map_and_select_area(polygon_select), click/draw and confirm area on map"")
+    print("No polygon currently selected. Run map_and_select_area(polygon_select), click/draw and confirm area on map")
     return None
 
 
@@ -207,6 +230,8 @@ def area_selection():
         if selected_shapefile_path:
             global gpd_df, col_name_var  # Define as global variables
             gpd_df = gpd.read_file(selected_shapefile_path)
+            ## Very important. it adds the unique identifier to be used to identifiy polygons with shp file
+            gpd_df["fid"] = gpd_df.index
 
             # Try to find a suitable column name for site names
             col_name_var = None
@@ -556,11 +581,21 @@ def select_site_from_map(gpd_df_sub):
     def handle_click(event, feature, **kwargs):
         html.value = f"<b style='color:orange'> Identifying selected area please wait .... </b> <br><br>"
         global selected_polygon
+        
+            # Write the feature information to a file
+        with open('tester.txt', 'w+') as file:
+            file.write(f"These are what we setting: {feature}\n\n")
+        
+        print("feature writen to file")
+            
+            
         selected_polygon = feature["properties"]
+        selected_polygon_geomvalue = feature["geometry"]
         # Update the style of the selected polygon
         update_polygon_style()
         html.value = f"<b style='color:orange'> Selected Polygon: </b> <br> {selected_polygon} <br>"
         set_global_result("global_selected_polygon", selected_polygon, RESULTS)
+        set_global_result("global_selected_polygon_geomvalue", selected_polygon_geomvalue, RESULTS)
         set_global_result("global_selected_polygon_type", "Selected", RESULTS)
         
         
@@ -702,6 +737,7 @@ def visualize_selected_area():
     
     """ This function visualizes drawn selected area """
     selected_global_polygon =  get_global_result("global_selected_polygon", RESULTS)
+    selected_global_polygon_geomvalue =  get_global_result("global_selected_polygon_geomvalue", RESULTS)
     global_area_selection_type =  get_global_result("global_area_selection_type", RESULTS)
     global_area_selection = get_global_result("global_selected_area", RESULTS)
     
