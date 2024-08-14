@@ -71,6 +71,34 @@ AREA_SELECTION = None
 selected_polygon = None
 
 
+   # <b>To use entire areas shown, please click <span style='color:orange'> 'USE ALL POLYGONS' </span>.<br> If you want to select a specific polygon please click on the map, to select area and <span style='color:orange'> wait for <span style='color:#5a5c5a'> 'Selected Polygon' </span> confirmation below.<span>  </b>
+def helper():
+    """This method will display all the available method and usage snippet to the user """
+    html = widgets.HTML()
+    docs = """
+    <p> <b style='color:black'> List of available commands for selection geographic area for analysis </b> </p>
+    <p style='color:black'>Example commands and description: 
+    
+    <br> 
+    
+    <span style='color:black'> 1.   <b style='color:orange'> polygon_select = notebook_dropdowns.area_selection() </b>: Displays available options to select vector polygon, or to draw area on map and assigns option selected to a variable "polygon_select"  </span>
+    <br>
+     <span style='color:black'> 2.  <b style='color:orange'> polygon_df = notebook_dropdowns.view_selected_polygon(polygon_select)</b>: Reads and sets the selected vector/polygon as a geopandas dataframe  to a varible called "polygon_df" for use.  </span> <br>
+         <span style='color:black'> 3. <b style='color:orange'> notebook_dropdowns.plot_selected_polygon(polygon_select) </b>: Plots the selected vector/polygon for visual confirmation </span> <br>
+          <span style='color:black'> 4. <b style='color:orange'> notebook_dropdowns.map_and_select_area(polygon_select) </b>: Generates an interactive map to click and select an area or draw area on map if draw option is selected in  'area_selection()' </span> <br>
+        <span style='color:black'> 5. <b style='color:orange'> notebook_dropdowns.polygon_selected() </b>: Displays the set vector/polygon selected and confirmed for use for analysis. </span> <br>
+    
+         <span style='color:black'> 6. <b style='color:orange'> notebook_dropdowns.visualize_selected_area() </b>: For drawn areas, this maps the selected area for visual confirmation.  </span> <br>
+    </p>
+    
+    
+    
+    """
+    html.value = docs
+    display(html)
+    return None
+
+
 def set_global_result(key, value, results_dict):
     """ This function sets value to
     globally defined RESULTS dictionary """
@@ -119,8 +147,12 @@ def polygon_selected():
                     return gpd_df_sub
             except Exception as e:
                 # return all of it  or return None (if something goes wrong)?
+                if not selected_global_polygon:
+                    print("No polygon currently selected. Run map_and_select_area(polygon_select), click/draw and confirm area on map")
                 return selected_global_polygon
     # returns None if cant find set selected polygon values
+    
+    print("No polygon currently selected. Run map_and_select_area(polygon_select), click/draw and confirm area on map"")
     return None
 
 
@@ -146,7 +178,7 @@ def area_selection():
     shapefiles_dict = {}
 
     def update_shapefiles(*args):
-        # List all shapefiles in the selected directory
+        args        # List all shapefiles in the selected directory
         shapefiles_list = glob.glob(
             os.path.join(vector_types_dict[get_type.value], "*.shp")
         )
@@ -355,7 +387,7 @@ def plot_selected_polygon(selected_polygon):
     stop_thread.set()
     progress_thread.join()  # Ensure the progress thread has finished 
 
-    return gpd_df_sub
+    return None
 
 
 
@@ -367,8 +399,6 @@ def mapper_preprocessor(geopandas_dataframe):
     # Set the GeoDataFrame  to geographic CRS for plotting
     geopandas_dataframe = geopandas_dataframe.to_crs(epsg=4326)
     return geopandas_dataframe
-
-
 
 
 
