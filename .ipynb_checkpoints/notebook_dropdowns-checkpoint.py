@@ -857,7 +857,7 @@ def visualize_selected_area():
             display_geopandas_df_selection(selected_area)
         else:
             display(HTML("No area selected."))
-        return selected_area
+        return None
     
 # # Example: Visualize the selected area stored in 'selected_area' from PART 2
 # visualize_selected_area(selected_area)
