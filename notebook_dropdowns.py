@@ -139,7 +139,7 @@ def polygon_selected():
           
                 # Option1: fetch object using fid
                 identifier = selected_global_polygon.get("fid", None)
-                if identifier:
+                if identifier is not None:
                     # find and return selected polygon 
                     gpd_df_sub = gpd_df[gpd_df["fid"] == identifier]
                     return gpd_df_sub
@@ -184,13 +184,9 @@ def convert_timestamps_to_strings(df):
     Converts all Timestamp columns in the DataFrame to strings.
     """
     for col in df.columns:
-        # Comment out print to debug
-        # print(f"{col} {df[col].dtype}")
         if isinstance(df[col].dtype, pd.core.dtypes.dtypes.DatetimeTZDtype) or df[col].dtype == 'datetime64[ns]' or df[col].dtype == 'datetime64[ms]':
             df[col] = df[col].astype(str)
     return df
-
-
 
 
 
