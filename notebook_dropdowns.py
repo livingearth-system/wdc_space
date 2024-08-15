@@ -95,7 +95,7 @@ def helper():
     display(html)
     return None
 
-
+# ================================= Helper Functions =========================================================
 def set_global_result(key, value, results_dict):
     """ This function sets value to
     globally defined RESULTS dictionary """
@@ -106,6 +106,57 @@ def get_global_result(key, results_dict):
     """ This reads value from globally defined RESULTS dictionary """
     # return RESULTS.get(key, "Nothing selected")
     return results_dict.get(key, None)
+
+
+def mapper_preprocessor(geopandas_dataframe):
+    """
+    Prepares the vector geopandas dataframe ready for mapping.
+    """
+    # Make a copy if the DataFrame might be a slice
+    geopandas_dataframe = geopandas_dataframe.copy()
+    
+    # Set the GeoDataFrame to geographic CRS for plotting
+    geopandas_dataframe = geopandas_dataframe.to_crs(epsg=4326)
+    return geopandas_dataframe
+
+
+def convert_to_geojson(selected_polygon):
+    """Given a geopandas dataframe of single site, else it takes just first row  
+    this converts and return a geojson format of it """
+    if isinstance(selected_polygon, gpd.GeoDataFrame):
+        # geometry = selected_polygon.loc[0, 'geometry']
+        geometry = selected_polygon.iloc[0]['geometry']
+        # Convert to GeoJSON-like dictionary
+        area_to_geojson = geometry.__geo_interface__
+        return area_to_geojson
+    else:
+        print("Error converting: Area is not a geopandas dataframe")
+        return None
+    
+def convert_to_geopandas_df(selected_polygon):
+    """Given a geojson of a single site, 
+    this converts and return a geopandas dataframe with one column = "geometry"  """
+    # If selected_polygon is a dictionary representing a geometry
+    if isinstance(selected_polygon, dict) and 'type' in selected_polygon and 'coordinates' in selected_polygon:
+        # Convert dictionary to a GeoPandas DataFrame
+        geom = shape(selected_polygon)
+        area_gdf = gpd.GeoDataFrame({'geometry': [geom]})
+        return area_gdf
+    else:
+        print("Error converting: Area is not in GeoJson format")
+        return None
+
+def convert_timestamps_to_strings(df):
+    """
+    Converts all Timestamp columns in the DataFrame to strings.
+    """
+    for col in df.columns:
+        if isinstance(df[col].dtype, pd.core.dtypes.dtypes.DatetimeTZDtype) or df[col].dtype == 'datetime64[ns]' or df[col].dtype == 'datetime64[ms]':
+            df[col] = df[col].astype(str)
+    return df
+
+
+# ==================================== End of helper functions =======================================
 
 
     
@@ -179,18 +230,9 @@ def polygon_selected():
     return None
 
 
-def convert_timestamps_to_strings(df):
-    """
-    Converts all Timestamp columns in the DataFrame to strings.
-    """
-    for col in df.columns:
-        if isinstance(df[col].dtype, pd.core.dtypes.dtypes.DatetimeTZDtype) or df[col].dtype == 'datetime64[ns]' or df[col].dtype == 'datetime64[ms]':
-            df[col] = df[col].astype(str)
-    return df
-
-
 
 def area_selection():
+    """Function that displays options to select an area, shapefile and polygon"""
     # Path to Welsh Dataset repository
     shapefiles_dict = {}
 
@@ -411,19 +453,10 @@ def plot_selected_polygon(selected_polygon):
 
 
 
-def mapper_preprocessor(geopandas_dataframe):
-    """
-    Prepares the vector geopandas dataframe ready for mapping.
-    """
-    # Make a copy if the DataFrame might be a slice
-    geopandas_dataframe = geopandas_dataframe.copy()
-    
-    # Set the GeoDataFrame to geographic CRS for plotting
-    geopandas_dataframe = geopandas_dataframe.to_crs(epsg=4326)
-    return geopandas_dataframe
 
 
 def map_and_select_area(selected_polygon):
+    """" Function to map selected polygon and click to select or draw to select """
     # fetch geodataframe of selected polygon
     if selected_polygon.value is not None:
         gpd_df_sub = gpd_df[gpd_df[col_name_var] == selected_polygon.value]
@@ -457,7 +490,7 @@ def map_and_select_area(selected_polygon):
 
 def select_site_from_map(gpd_df_sub):
     """
-    Produces an interactive plot of a given polygon
+    Produces an interactive plot of a given polygon for click and select
     """
 
     stop_thread = threading.Event()  # Event to signal the thread to stop
@@ -718,9 +751,15 @@ def draw_site_from_map(gpd_df_sub):
 
     
     
-# Function to display AREA_selection on a map
-def display_geopandas_df_selection(area_selection):
+
+
     
+# ========================= Visualize selection  ======================== 
+
+
+# Function to display AREA_selection on a map if in geopandas df format
+def display_geopandas_df_selection(area_selection):
+    """ Given a df this allows to map area for visual confirmation """
     # Explicitly create a copy if needed
     area_selection = area_selection.copy()
     
@@ -768,14 +807,9 @@ def display_geopandas_df_selection(area_selection):
         display(HTML("No area selected."))
 
 
-    
-# ========================= Visualize selection  ======================== 
-
-
-# Function to visualize the selected area on a new map
+# Function to visualize the selected area on a new map if in GeoJson format
 def visualize_selected_area():
-    
-    """ This function visualizes drawn selected area """
+    """ This function visualizes drawn selected area that is in GeoJson format  """
     selected_global_polygon =  get_global_result("global_selected_polygon", RESULTS)
     selected_global_polygon_geomvalue =  get_global_result("global_selected_polygon_geomvalue", RESULTS)
     global_area_selection_type =  get_global_result("global_area_selection_type", RESULTS)
@@ -998,7 +1032,8 @@ def create_and_display_buffer_include_selection(area_gdf, buffer_distance):
         # Function to confirm and  buffer selection
         def confirm_buffer_selection(button):
             # AREA_selection = area_gdf
-            geometry = AREA_BufferA.loc[0, 'geometry']
+            # geometry = AREA_BufferA.loc[0, 'geometry']
+            geometry = AREA_BufferA.iloc[0]['geometry']
             # Convert to GeoJSON-like dictionary
             buffered_area_togeojson = geometry.__geo_interface__
             set_global_result("global_selected_area", buffered_area_togeojson, RESULTS)
@@ -1182,7 +1217,8 @@ def create_and_display_buffer_exclude_selection(area_gdf, buffer_distance):
 
         # Function to confirm and  buffer selection
         def confirm_buffer_selection(button):
-            geometry = AREA_BufferB.loc[0, 'geometry']
+            # geometry = AREA_BufferB.loc[0, 'geometry']
+            geometry = AREA_BufferB.iloc[0]['geometry']
             # Convert to GeoJSON-like dictionary
             buffered_area_togeojson = geometry.__geo_interface__
             set_global_result("global_selected_area", buffered_area_togeojson, RESULTS)
